@@ -1,0 +1,23 @@
+{
+  "name": "midifs",
+  "version": "0.0.1",
+  "description": "Read and write MIDI files via Node.js's fs (file system) module",
+  "author": "Adam Murray",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "clean": "rm -rf lib",
+    "build": "babel --out-dir lib src",
+    "test": "mocha --compilers js:babel-core/register test/**/*.test.js"
+  },
+  "keywords": [
+    "midi",
+    "music"
+  ],
+  "devDependencies": {
+    "babel-cli": "6.6.5",
+    "babel-core": "6.7.2",
+    "babel-preset-es2015-node": "5.0.3",
+    "mocha": "2.4.5"
+  }
+}
