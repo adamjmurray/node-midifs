@@ -1,42 +1,64 @@
 import MIDI from '../midi-constants';
-import FileReader from './file-reader';
 
-// TODO: FileReader should be passed in to the constructor, so this can be adjusted to work outside of Node
-export default class MIDIFileReader extends FileReader {
+export default class MIDIFileReader {
 
-  read(filepath) {
-    return this
-      .open(filepath)
-      .then(() => {
-        const header = this.readHeader();
+  constructor(arrayBuffer) {
+    this.arrayBuffer = arrayBuffer;
+  }
 
-        if (header.division & 0x8000) throw 'SMPTE time division format not supported';
-        this.ticksPerBeat = header.division;
+  toJSON() {
+    this.dataView = new DataView(this.arrayBuffer);
+    this.byteOffset = 0;
 
-        const tracks = [];
-        for (let i=0; i<header.ntracks; i++) {
-          this.trackNumber = i + 1;
-          tracks.push(this.readTrack());
-        }
+    const header = this.readHeader();
+    if (header.division & 0x8000) throw 'SMPTE time division format not supported';
+    this.ticksPerBeat = header.division;
 
-        return {
-          header,
-          tracks,
-        }
-      });
+    const tracks = [];
+    for (let i=0; i<header.ntracks; i++) {
+      this.trackNumber = i + 1;
+      tracks.push(this.readTrack());
+    }
+
+    return {
+      header,
+      tracks,
+    }
+  }
+
+  nextUInt32() {
+    const int32 = this.dataView.getUint32(this.byteOffset);
+    this.byteOffset += 4;
+    return int32;
+  }
+
+  nextUInt16() {
+    const int16 = this.dataView.getUint16(this.byteOffset);
+    this.byteOffset += 2;
+    return int16;
+  }
+
+  nextUInt8() {
+    const int8 = this.dataView.getUint8(this.byteOffset);
+    this.byteOffset += 1;
+    return int8;
+  }
+
+  backTrack(bytes) {
+    this.byteOffset -= bytes;
   }
 
   readHeader() {
-    if (this.readUInt32BE() !== MIDI.HEADER_CHUNK_ID) throw 'MIDI format error: Invalid header chuck ID';
-    const headerSize = this.readUInt32BE();
+    if (this.nextUInt32() !== MIDI.HEADER_CHUNK_ID) throw 'MIDI format error: Invalid header chuck ID';
+    const headerSize = this.nextUInt32();
     if (headerSize < 6) throw 'Invalid MIDI file: header must be at least 6 bytes';
 
-    const format = this.readUInt16BE();
-    const ntracks = this.readUInt16BE(); // number of tracks
-    const division = this.readUInt16BE();
+    const format = this.nextUInt16();
+    const ntracks = this.nextUInt16(); // number of tracks
+    const division = this.nextUInt16();
 
     // ignore extra header bytes
-    for (let i=6; i<headerSize; i++) this.readUInt8();
+    for (let i=6; i<headerSize; i++) this.nextUInt8();
 
     return {
       format,
@@ -46,9 +68,9 @@ export default class MIDIFileReader extends FileReader {
   }
 
   readTrack() {
-    if (this.readUInt32BE() !== MIDI.TRACK_CHUNK_ID) throw 'MIDI format error: Invalid track chuck ID';
+    if (this.nextUInt32() !== MIDI.TRACK_CHUNK_ID) throw 'MIDI format error: Invalid track chuck ID';
 
-    const trackSize = this.readUInt32BE();
+    const trackSize = this.nextUInt32();
 
     const track = {};
     this.timeInTicks = 0;
@@ -81,7 +103,7 @@ export default class MIDIFileReader extends FileReader {
   }
 
   readEvent() {
-    const eventType = this.readUInt8();
+    const eventType = this.nextUInt8();
     switch (eventType) {
       case MIDI.META_EVENT:
         return this.readMetaEvent();
@@ -94,7 +116,7 @@ export default class MIDIFileReader extends FileReader {
   }
 
   readMetaEvent() {
-    const type = this.readUInt8();
+    const type = this.nextUInt8();
     switch (type) {
       case MIDI.SEQ_NUMBER:
         return {
@@ -189,7 +211,7 @@ export default class MIDIFileReader extends FileReader {
     const length = this.readVariableLengthQuantity();
     let value = 0;
     for (let i=0; i<length; i++) {
-      value = (value << 8) + this.readUInt8();
+      value = (value << 8) + this.nextUInt8();
     }
     return value;
   }
@@ -202,7 +224,7 @@ export default class MIDIFileReader extends FileReader {
     const length = this.readVariableLengthQuantity();
     const data = [];
     for (let i=0; i<length; i++) {
-      data.push(this.readUInt8());
+      data.push(this.nextUInt8());
     }
     return data;
   };
@@ -219,9 +241,8 @@ export default class MIDIFileReader extends FileReader {
       // This is a running status byte, reuse type and channel from last message:
       type = this.messageType;
       channel = this.channel;
-      // And the byte we thought was eventType is really the next data byte,
-      // so feed it back into the file reader to get it from the next readUInt8() call below
-      this.feedUInt8(eventType);
+      // And the byte we thought was eventType is really the next data byte, so backtrack
+      this.backTrack(1);
     }
 
     let event;
@@ -235,39 +256,39 @@ export default class MIDIFileReader extends FileReader {
       case MIDI.NOTE_AFTERTOUCH:
         event = {
           type: 'note aftertouch',
-          pitch: this.readUInt8(),
-          value: this.readUInt8(),
+          pitch: this.nextUInt8(),
+          value: this.nextUInt8(),
         };
         break;
       case MIDI.CONTROLLER:
         event = {
           type: 'controller',
-          number: this.readUInt8(),
-          value: this.readUInt8(),
+          number: this.nextUInt8(),
+          value: this.nextUInt8(),
         };
         break;
       case MIDI.PROGRAM_CHANGE:
         event = {
           type: 'program change',
-          number: this.readUInt8(),
+          number: this.nextUInt8(),
         };
         break;
       case MIDI.CHANNEL_AFTERTOUCH:
         event = {
           type: 'channel aftertouch',
-          value: this.readUInt8(),
+          value: this.nextUInt8(),
         };
         break;
       case MIDI.PITCH_BEND:
         event = {
           type: 'pitch bend',
-          value: (this.readUInt8() << 7) + this.readUInt8(),
+          value: (this.nextUInt8() << 7) + this.nextUInt8(),
         };
         break;
       default:
         // TODO: handle "system realtime messages", etc
         // TODO: I think the correct thing to do here is to keep
-        // reading bytes until we get to the next one where (byte & 0x80) is truthy, then feed it back to the reader
+        // reading bytes until we get to the next one where (byte & 0x80) is truthy, then backtrack
         throw `ERROR: unexpected message ${type}`;
     }
     event.channel = channel;
@@ -275,8 +296,8 @@ export default class MIDIFileReader extends FileReader {
   }
 
   readNoteOn() {
-    const pitch = this.readUInt8();
-    const velocity = this.readUInt8();
+    const pitch = this.nextUInt8();
+    const velocity = this.nextUInt8();
     if (velocity === 0) {
       // handle as a note off without an off velocity
       this.readNoteOff(pitch);
@@ -296,8 +317,8 @@ export default class MIDIFileReader extends FileReader {
   readNoteOff(pitch) {
     let release;
     if (pitch == null) {
-      pitch = this.readUInt8();
-      release = this.readUInt8(); // AKA off velocity
+      pitch = this.nextUInt8();
+      release = this.nextUInt8(); // AKA off velocity
     } // else pitch was passed in from readNoteOn() when a velocity of 0 was encountered
 
     if (this.notes[pitch]) {
@@ -318,10 +339,10 @@ export default class MIDIFileReader extends FileReader {
 
   readVariableLengthQuantity() {
     let data = 0;
-    let byte = this.readUInt8();
+    let byte = this.nextUInt8();
     while (byte & 0x80) {
       data = (data << 7) + (byte & 0x7F);
-      byte = this.readUInt8();
+      byte = this.nextUInt8();
     }
     return (data << 7) + (byte & 0x7F);
   };
