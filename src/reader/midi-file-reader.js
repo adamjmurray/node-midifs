@@ -9,14 +9,21 @@ export default class MIDIFileReader extends FileReader {
       .then(() => {
         this.readHeader();
 
-        console.log('format type', this.formatType);
-        console.log('num tracks', this.numTracks);
-        console.log('ticks per beat', this.ticksPerBeat);
+        // console.log('format type', this.formatType);
+        // console.log('num tracks', this.numTracks);
+        // console.log('ticks per beat', this.ticksPerBeat);
 
         const tracks = [];
         for (let i=0; i<this.numTracks; i++) {
           this.trackNumber = i + 1;
           tracks.push(this.readTrack());
+        }
+
+        return {
+          format: this.formatType,
+          ntracks: this.numTracks,
+          division: this.ticksPerBeat,
+          tracks,
         }
       });
   }
@@ -42,18 +49,17 @@ export default class MIDIFileReader extends FileReader {
     if (this.readUInt32BE() !== MIDI.TRACK_CHUNK_ID) throw 'MIDI format error: Invalid track chuck ID';
 
     const trackSize = this.readUInt32BE();
-    let timeInTicks = 0;
-    const track = {};
-    this.notes = {};
 
-    console.log('read track with track size', trackSize);
+    const track = {};
+    let timeInTicks = 0;
+    this.notes = {};
 
     const endByte = this.byteOffset + trackSize;
     while (this.byteOffset < endByte) {
       timeInTicks += this.readVariableLengthQuantity();
       this.currentTimeInTicks = timeInTicks;
-      // events[time] = this.readEvent();
       const event = this.readEvent();
+      // console.log(`at ${timeInTicks}, got ${JSON.stringify(event)}`);
       if (event) {
         let eventTimeInTicks = timeInTicks;
         if (event.timeInTicks != null) {
@@ -61,8 +67,7 @@ export default class MIDIFileReader extends FileReader {
           eventTimeInTicks = event.timeInTicks;
           delete event.timeInTicks;
         }
-        console.log('event', event);
-        const timeInBeats = timeInTicks / this.ticksPerBeat;
+        const timeInBeats = eventTimeInTicks / this.ticksPerBeat;
         if (!track[timeInBeats]) track[timeInBeats] = [];
         track[timeInBeats].push(event);
 
@@ -71,7 +76,6 @@ export default class MIDIFileReader extends FileReader {
     }
 
     // TODO: warn about held notes
-    console.log(track);
     return track;
   }
 
@@ -204,59 +208,69 @@ export default class MIDIFileReader extends FileReader {
 
 
   readMessage(eventType) {
-    console.log('event type', eventType.toString(16));
-    const type = eventType & 0xF0;
-    const channel = (eventType & 0x0F) + 1;
-    // TODO: check for running status by examing most signifcant bit
-    console.log('type', type);
-    console.log('channel', channel);
+    let type;
+    let channel;
+    if (eventType & 0x80) {
+      this.messageType = type = eventType & 0xF0;
+      this.channel = channel = (eventType & 0x0F) + 1;
+    }
+    else {
+      // This is a running status byte, reuse type and channel from last message:
+      type = this.messageType;
+      channel = this.channel;
+      // And the byte we thought was eventType is really the next data byte,
+      // so feed it back into the file reader to get it from the next readUInt8() call below
+      this.feedUInt8(eventType);
+    }
+
+    let event;
     switch(type) {
       case MIDI.NOTE_ON:
-        return this.readNoteOn();
+        this.readNoteOn();
+        return null; // note event will be created via corresponding note off
       case MIDI.NOTE_OFF:
-        return this.readNoteOff();
+        event = this.readNoteOff();
+        break;
       case MIDI.NOTE_AFTERTOUCH:
-        return {
+        event = {
           type: 'note aftertouch',
           pitch: this.readUInt8(),
           value: this.readUInt8(),
         };
+        break;
       case MIDI.CONTROLLER:
-        return {
-          type:'controller',
+        event = {
+          type: 'controller',
           number: this.readUInt8(),
           value: this.readUInt8(),
         };
+        break;
       case MIDI.PROGRAM_CHANGE:
-        return {
+        event = {
           type: 'program change',
           number: this.readUInt8(),
         };
+        break;
       case MIDI.CHANNEL_AFTERTOUCH:
-        return {
-          type:'channel aftertouch',
+        event = {
+          type: 'channel aftertouch',
           value: this.readUInt8(),
         };
+        break;
       case MIDI.PITCH_BEND:
-        return {
-          type:'pitch bend',
+        event = {
+          type: 'pitch bend',
           value: (this.readUInt8() << 7) + this.readUInt8(),
         };
-      /* TODO: move this check up top
+        break;
       default:
-        // "running status" event using same type and channel of previous event
-        runningStatus = true
-      @stream.feedByte(eventChunkType) # this will be returned by the next @stream.uInt8() call
-      @_readChannelEvent(@prevEventChunkType)
-*/
-      }
-        /* TODO:
-         unless runningStatus
-         event.channel = channel if event
-         @prevEventChunkType = eventChunkType
-         event
-         */
-
+        // TODO: handle "system realtime messages", etc
+        // TODO: I think the correct thing to do here is to keep
+        // reading bytes until we get to the next one where (byte & 0x80) is truthy, then feed it back to the reader
+        throw `ERROR: unexpected message ${type}`;
+    }
+    event.channel = channel;
+    return event;
   }
 
   readNoteOn() {
@@ -295,7 +309,7 @@ export default class MIDIFileReader extends FileReader {
         duration: (this.currentTimeInTicks - startTime) / this.ticksPerBeat,
       };
       if (release != null) event.release = release;
-      event.time = startTime; // special case, readTrack() should use this instead of it's time offset
+      event.timeInTicks = startTime; // special case, readTrack() should use this instead of it's time offset
       return event;
     }
     else console.log(`Warning: ignoring unmatched note off event on track ${this.trackNumber} for pitch ${pitch}`);
