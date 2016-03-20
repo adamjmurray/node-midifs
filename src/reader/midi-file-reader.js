@@ -1,28 +1,26 @@
 import MIDI from '../midi-constants';
 import FileReader from './file-reader';
 
+// TODO: FileReader should be passed in to the constructor, so this can be adjusted to work outside of Node
 export default class MIDIFileReader extends FileReader {
 
   read(filepath) {
     return this
       .open(filepath)
       .then(() => {
-        this.readHeader();
+        const header = this.readHeader();
 
-        // console.log('format type', this.formatType);
-        // console.log('num tracks', this.numTracks);
-        // console.log('ticks per beat', this.ticksPerBeat);
+        if (header.division & 0x8000) throw 'SMPTE time division format not supported';
+        this.ticksPerBeat = header.division;
 
         const tracks = [];
-        for (let i=0; i<this.numTracks; i++) {
+        for (let i=0; i<header.ntracks; i++) {
           this.trackNumber = i + 1;
           tracks.push(this.readTrack());
         }
 
         return {
-          format: this.formatType,
-          ntracks: this.numTracks,
-          division: this.ticksPerBeat,
+          header,
           tracks,
         }
       });
@@ -30,19 +28,21 @@ export default class MIDIFileReader extends FileReader {
 
   readHeader() {
     if (this.readUInt32BE() !== MIDI.HEADER_CHUNK_ID) throw 'MIDI format error: Invalid header chuck ID';
-
     const headerSize = this.readUInt32BE();
     if (headerSize < 6) throw 'Invalid MIDI file: header must be at least 6 bytes';
 
-    this.formatType = this.readUInt16BE();
-    this.numTracks = this.readUInt16BE();
-
-    const timeDivision = this.readUInt16BE();
-    if (timeDivision & 0x8000) throw 'SMPTE time division format not supported';
-    this.ticksPerBeat = timeDivision;
+    const format = this.readUInt16BE();
+    const ntracks = this.readUInt16BE(); // number of tracks
+    const division = this.readUInt16BE();
 
     // ignore extra header bytes
     for (let i=6; i<headerSize; i++) this.readUInt8();
+
+    return {
+      format,
+      ntracks,
+      division,
+    }
   }
 
   readTrack() {
@@ -51,31 +51,32 @@ export default class MIDIFileReader extends FileReader {
     const trackSize = this.readUInt32BE();
 
     const track = {};
-    let timeInTicks = 0;
+    this.timeInTicks = 0;
     this.notes = {};
 
     const endByte = this.byteOffset + trackSize;
     while (this.byteOffset < endByte) {
-      timeInTicks += this.readVariableLengthQuantity();
-      this.currentTimeInTicks = timeInTicks;
+      this.timeInTicks += this.readVariableLengthQuantity();
+
       const event = this.readEvent();
       // console.log(`at ${timeInTicks}, got ${JSON.stringify(event)}`);
       if (event) {
-        let eventTimeInTicks = timeInTicks;
-        if (event.timeInTicks != null) {
+        let timeInTicks;
+        if (event.timeInTicks == null) {
+          timeInTicks = this.timeInTicks;
+        } else {
           // special case for note on / note off pairs
-          eventTimeInTicks = event.timeInTicks;
+          timeInTicks = event.timeInTicks;
           delete event.timeInTicks;
         }
-        const timeInBeats = eventTimeInTicks / this.ticksPerBeat;
+        const timeInBeats = timeInTicks / this.ticksPerBeat;
         if (!track[timeInBeats]) track[timeInBeats] = [];
         track[timeInBeats].push(event);
-
-        // TODO: timeInBeats is wrong, some notes are missing
       }
     }
 
-    // TODO: warn about held notes
+    // TODO: warn about held notes (if DEBUG for this lib is enabled?)
+
     return track;
   }
 
@@ -86,7 +87,7 @@ export default class MIDIFileReader extends FileReader {
         return this.readMetaEvent();
       case MIDI.SYSEX_EVENT:
       case MIDI.SYSEX_CHUNK:
-        throw 'Sysex not supported yet';
+        throw 'Sysex not supported yet'; // TODO
       default:
         return this.readMessage(eventType);
     }
@@ -286,7 +287,7 @@ export default class MIDIFileReader extends FileReader {
         console.log(`Warning: ignoring overlapping note on track number ${this.trackNumber} for pitch ${pitch}`);
       }
       else {
-        this.notes[pitch] = [velocity, this.currentTimeInTicks];
+        this.notes[pitch] = [velocity, this.timeInTicks];
       }
     }
     return null; /// we'll create a "note" event when we see the corresponding note_off
@@ -306,7 +307,7 @@ export default class MIDIFileReader extends FileReader {
         type: 'note',
         pitch: pitch,
         velocity: velocity,
-        duration: (this.currentTimeInTicks - startTime) / this.ticksPerBeat,
+        duration: (this.timeInTicks - startTime) / this.ticksPerBeat,
       };
       if (release != null) event.release = release;
       event.timeInTicks = startTime; // special case, readTrack() should use this instead of it's time offset
