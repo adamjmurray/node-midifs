@@ -1,4 +1,4 @@
-import MIDI from '../midi-constants';
+import MIDI from './midi-file-constants';
 
 export default class MIDIFileReader {
 
@@ -118,85 +118,85 @@ export default class MIDIFileReader {
   readMetaEvent() {
     const type = this.nextUInt8();
     switch (type) {
-      case MIDI.SEQ_NUMBER:
+      case MIDI.SEQUENCE_NUMBER_BYTE:
         return {
-          type: 'sequence number',
+          type: MIDI.SEQUENCE_NUMBER,
           number: this.readMetaValue()
         };
-      case MIDI.TEXT:
+      case MIDI.TEXT_BYTE:
         return {
-          type: 'text',
+          type: MIDI.TEXT,
           text: this.readMetaText()
         };
-      case MIDI.COPYRIGHT:
+      case MIDI.COPYRIGHT_BYTE:
         return {
-          type: 'copyright',
+          type: MIDI.COPYRIGHT,
           text: this.readMetaText(),
         };
-      case MIDI.SEQ_NAME:
+      case MIDI.SEQUENCE_NAME_BYTE:
         return {
-          type: 'sequence name',
+          type: MIDI.SEQUENCE_NAME,
           text: this.readMetaText(),
         };
-      case MIDI.INSTRUMENT_NAME:
+      case MIDI.INSTRUMENT_NAME_BYTE:
         return {
-          type: 'instrument name',
+          type: MIDI.INSTRUMENT_NAME,
           text: this.readMetaText(),
         };
-      case MIDI.LYRICS:
+      case MIDI.LYRICS_BYTE:
         return {
-          type: 'lyrics',
+          type: MIDI.LYRICS,
           text: this.readMetaText(),
         };
-      case MIDI.MARKER:
+      case MIDI.MARKER_BYTE:
         return {
-          type: 'marker',
+          type: MIDI.MARKER,
           text: this.readMetaText(),
         };
-      case MIDI.CUE_POINT:
+      case MIDI.CUE_POINT_BYTE:
         return {
-          type: 'cue point',
+          type: MIDI.CUE_POINT,
           text: this.readMetaText(),
         };
-      case MIDI.CHANNEL_PREFIX:
+      case MIDI.CHANNEL_PREFIX_BYTE:
         return {
-          type: 'channel prefix',
+          type: MIDI.CHANNEL_PREFIX,
           channel: this.readMetaValue(),
         };
-      case MIDI.END_OF_TRACK:
+      case MIDI.TRACK_END_BYTE:
         this.readMetaData(); // should be empty
         return {
-          type: 'end of track',
+          type: MIDI.TRACK_END,
         };
-      case MIDI.TEMPO:
+      case MIDI.TEMPO_BYTE:
         return {
-          type: 'tempo',
+          type: MIDI.TEMPO,
           bpm: MIDI.MICROSECONDS_PER_MINUTE / this.readMetaValue(),
         };
-      case MIDI.SMPTE_OFFSET:
+      case MIDI.SMPTE_OFFSET_BYTE:
         return {
-          type: 'smpte offset',
+          type: MIDI.SMPTE_OFFSET,
           data: this.readMetaData(),
         };
-      case MIDI.TIME_SIGNATURE:
+      case MIDI.TIME_SIGNATURE_BYTE:
         const [numerator, denominatorPower] = this.readMetaData();
         return {
-          type: 'time signature',
+          type: MIDI.TIME_SIGNATURE,
           numerator: numerator,
           denominator: Math.pow(2, denominatorPower)
         };
-      case MIDI.KEY_SIGNATURE:
+      case MIDI.KEY_SIGNATURE_BYTE:
         const [keyValue, scaleValue] = this.readMetaData();
-        const key = MIDI.KEY_VALUE_TO_NAME[keyValue] || `unknown ${keyValue}`;
+        const key = MIDI.KEY_NAMES_BY_VALUE[keyValue] || `unknown ${keyValue}`;
         const scale = scaleValue === 0 ? 'major' : scaleValue === 1 ? 'minor' : `unknown ${scaleValue}`;
         return {
-          type: 'key signature',
+          type: MIDI.KEY_SIGNATURE,
           key: key,
           scale: scale,
         };
-      case MIDI.SEQ_SPECIFIC:
+      case MIDI.SEQUENCE_SPECIFIC_BYTE:
         return {
-          type: 'sequencer specific',
+          type: MIDI.SEQUENCE_SPECIFIC,
           data: this.readMetaData(),
         };
       default:
@@ -247,41 +247,41 @@ export default class MIDIFileReader {
 
     let event;
     switch(type) {
-      case MIDI.NOTE_ON:
+      case MIDI.NOTE_ON_BYTE:
         this.readNoteOn();
         return null; // note event will be created via corresponding note off
-      case MIDI.NOTE_OFF:
+      case MIDI.NOTE_OFF_BYTE:
         event = this.readNoteOff();
         break;
-      case MIDI.NOTE_AFTERTOUCH:
+      case MIDI.NOTE_AFTERTOUCH_BYTE:
         event = {
-          type: 'note aftertouch',
+          type: MIDI.NOTE_AFTERTOUCH,
           pitch: this.nextUInt8(),
           value: this.nextUInt8(),
         };
         break;
-      case MIDI.CONTROLLER:
+      case MIDI.CONTROLLER_BYTE:
         event = {
-          type: 'controller',
+          type: MIDI.CONTROLLER,
           number: this.nextUInt8(),
           value: this.nextUInt8(),
         };
         break;
-      case MIDI.PROGRAM_CHANGE:
+      case MIDI.PROGRAM_CHANGE_BYTE:
         event = {
-          type: 'program change',
+          type: MIDI.PROGRAM_CHANGE,
           number: this.nextUInt8(),
         };
         break;
-      case MIDI.CHANNEL_AFTERTOUCH:
+      case MIDI.CHANNEL_AFTERTOUCH_BYTE:
         event = {
-          type: 'channel aftertouch',
+          type: MIDI.CHANNEL_AFTERTOUCH,
           value: this.nextUInt8(),
         };
         break;
-      case MIDI.PITCH_BEND:
+      case MIDI.PITCH_BEND_BYTE:
         event = {
-          type: 'pitch bend',
+          type: MIDI.PITCH_BEND,
           value: (this.nextUInt8() << 7) + this.nextUInt8(),
         };
         break;
@@ -325,7 +325,7 @@ export default class MIDIFileReader {
       const [velocity, startTime] = this.notes[pitch];
       delete this.notes[pitch];
       const event = {
-        type: 'note',
+        type: MIDI.NOTE,
         pitch: pitch,
         velocity: velocity,
         duration: (this.timeInTicks - startTime) / this.ticksPerBeat,

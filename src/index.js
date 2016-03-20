@@ -1,5 +1,7 @@
 import fs from 'fs';
-import MIDIFileReader from './reader/midi-file-reader';
+import MIDIFileReader from './midi-file-reader';
+import MIDIFileWriter from './midi-file-writer';
+import MIDI from './midi-file-constants';
 
 function readMIDIFile(filepath) {
   return new Promise((resolve, reject) => {
@@ -19,4 +21,5 @@ function writeMIDIFile(filepath, data) {
 export {
   readMIDIFile,
   writeMIDIFile,
+  MIDI,
 }
