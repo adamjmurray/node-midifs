@@ -26,6 +26,7 @@ export default Object.freeze({
 
   HEADER_CHUNK_ID: 0x4D546864, // "MThd"
   TRACK_CHUNK_ID: 0x4D54726B, // "MTrk"
+  DEFAULT_DIVISION: 960,
 
   MICROSECONDS_PER_MINUTE: 60000000,
 
