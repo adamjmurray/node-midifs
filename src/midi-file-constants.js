@@ -1,3 +1,4 @@
+'use strict';
 const KEY_NAMES_BY_VALUE = Object.freeze({
   0: 'C',
   1: 'G',
@@ -22,7 +23,7 @@ Object.keys(KEY_NAMES_BY_VALUE).forEach(value => {
 });
 Object.freeze(KEY_VALUES_BY_NAME);
 
-export default Object.freeze({
+module.exports = Object.freeze({
 
   HEADER_CHUNK_ID: 0x4D546864, // "MThd"
   TRACK_CHUNK_ID: 0x4D54726B, // "MTrk"

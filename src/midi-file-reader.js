@@ -1,6 +1,7 @@
-import MIDI from './midi-file-constants';
+'use strict';
+const MIDI = require('./midi-file-constants');
 
-export default class MIDIFileReader {
+module.exports = class MIDIFileReader {
 
   constructor(arrayBuffer) {
     this.arrayBuffer = arrayBuffer;
@@ -117,6 +118,7 @@ export default class MIDIFileReader {
 
   readMetaEvent() {
     const type = this.nextUInt8();
+    let metaData;
     switch (type) {
       case MIDI.SEQUENCE_NUMBER_BYTE:
         return {
@@ -179,14 +181,20 @@ export default class MIDIFileReader {
           data: this.readMetaData(),
         };
       case MIDI.TIME_SIGNATURE_BYTE:
-        const [numerator, denominatorPower] = this.readMetaData();
+        // const [numerator, denominatorPower] = this.readMetaData();
+        metaData = this.readMetaData();
+        const numerator = metaData[0];
+        const denominatorPower = metaData[1];
         return {
           type: MIDI.TIME_SIGNATURE,
           numerator: numerator,
           denominator: Math.pow(2, denominatorPower)
         };
       case MIDI.KEY_SIGNATURE_BYTE:
-        const [keyValue, scaleValue] = this.readMetaData();
+        // const [keyValue, scaleValue] = this.readMetaData();
+        metaData = this.readMetaData();
+        const keyValue = metaData[0];
+        const scaleValue = metaData[1];
         const key = MIDI.KEY_NAMES_BY_VALUE[keyValue] || `unknown ${keyValue}`;
         const scale = scaleValue === 0 ? 'major' : scaleValue === 1 ? 'minor' : `unknown ${scaleValue}`;
         return {
@@ -322,7 +330,10 @@ export default class MIDIFileReader {
     } // else pitch was passed in from readNoteOn() when a velocity of 0 was encountered
 
     if (this.notes[pitch]) {
-      const [velocity, startTime] = this.notes[pitch];
+      // const [velocity, startTime] = this.notes[pitch];
+      const pitchData = this.notes[pitch];
+      const velocity = pitchData[0];
+      const startTime = pitchData[0];
       delete this.notes[pitch];
       const event = {
         type: MIDI.NOTE,
@@ -346,6 +357,4 @@ export default class MIDIFileReader {
     }
     return (data << 7) + (byte & 0x7F);
   };
-}
-
-
+};

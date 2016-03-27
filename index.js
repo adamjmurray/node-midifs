@@ -1,4 +1,7 @@
-import { readMIDIFile } from './src';
+'use strict';
+const midifs = require('./src');
+const readMIDIFile = midifs.readMIDIFile;
+const writeMIDIFile = midifs.writeMIDIFile;
 
 readMIDIFile(process.argv[2])
   .then(data => console.log(JSON.stringify(data, null, 2)))

@@ -1,7 +1,8 @@
-import fs from 'fs';
-import MIDIFileReader from './midi-file-reader';
-import MIDIFileWriter from './midi-file-writer';
-import MIDI from './midi-file-constants';
+'use strict';
+const fs = require('fs');
+const MIDIFileReader = require('./midi-file-reader');
+const MIDIFileWriter = require('./midi-file-writer');
+const MIDI = require('./midi-file-constants');
 
 function readMIDIFile(filepath) {
   return new Promise((resolve, reject) => {
@@ -25,8 +26,8 @@ function writeMIDIFile(filepath, midiJSON) {
   });
 }
 
-export {
+module.exports = {
   readMIDIFile,
   writeMIDIFile,
   MIDI,
-}
+};

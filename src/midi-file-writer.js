@@ -1,6 +1,7 @@
-import MIDI from './midi-file-constants';
+'use strict';
+const MIDI = require('./midi-file-constants');
 
-export default class MIDIFileWriter {
+module.exports = class MIDIFileWriter {
 
   constructor(midiJSON) {
     this.midiJSON = midiJSON;
