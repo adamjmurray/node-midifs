@@ -333,7 +333,7 @@ module.exports = class MIDIFileReader {
       // const [velocity, startTime] = this.notes[pitch];
       const pitchData = this.notes[pitch];
       const velocity = pitchData[0];
-      const startTime = pitchData[0];
+      const startTime = pitchData[1];
       delete this.notes[pitch];
       const event = {
         type: MIDI.NOTE,
